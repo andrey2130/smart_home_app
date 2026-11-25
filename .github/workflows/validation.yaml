@@ -1,13 +1,17 @@
 name: Validation
 
 on:
+  # No branch filter so stacked PRs (base != main) are validated too.
+  # 'edited' re-runs CI when the PR base branch is changed.
   pull_request:
-    branches: [main, master]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main, master]
 
 jobs:
   validate:
+    # Skip 'edited' events that only change the title or description.
+    if: github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
