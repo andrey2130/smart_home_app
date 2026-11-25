@@ -1,68 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_home_app/counter_command.dart';
 import 'package:smart_home_app/main.dart';
+import 'package:smart_home_app/routes/app_routes.dart';
+
+// Розміри екранів: iPhone SE, iPhone 8, iPad (портрет і альбом).
+const List<Size> _screenSizes = [
+  Size(320, 568),
+  Size(375, 667),
+  Size(768, 1024),
+  Size(1366, 1024),
+];
+
+void _setSize(WidgetTester tester, Size size) {
+  tester.view
+    ..physicalSize = size
+    ..devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+// Відкриває застосунок одразу на маршруті [route].
+Future<void> _pumpRoute(WidgetTester tester, String route) async {
+  await tester.pumpWidget(
+    SmartHomeApp(router: AppRoutes.createRouter(initialLocation: route)),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
-  group('CounterCommand.parse', () {
-    test('parses positive and negative integers', () {
-      expect(CounterCommand.parse('5'), isA<IncrementCommand>());
-      expect((CounterCommand.parse('-7') as IncrementCommand).value, -7);
-      expect((CounterCommand.parse(' +3 ') as IncrementCommand).value, 3);
-    });
+  testWidgets('navigation between all screens', (tester) async {
+    _setSize(tester, const Size(375, 667));
+    await tester.pumpWidget(SmartHomeApp());
+    expect(find.text('Увійдіть, щоб керувати своїм домом'), findsOneWidget);
 
-    test('recognizes the reset phrase', () {
-      expect(CounterCommand.parse('Avada Kedavra'), isA<ResetCommand>());
-    });
+    await tester.tap(find.text('Зареєструватися'));
+    await tester.pumpAndSettle();
+    expect(find.text('Створити акаунт'), findsOneWidget);
 
-    test('rejects everything else', () {
-      for (final input in [
-        '',
-        '   ',
-        'abc',
-        '1.5',
-        '0x10',
-        '@#!',
-        'avada kedavra',
-        '99999999999999999999999',
-      ]) {
-        expect(
-          CounterCommand.parse(input),
-          isA<InvalidCommand>(),
-          reason: input,
-        );
-      }
-    });
+    await tester.ensureVisible(find.text('Увійти'));
+    await tester.tap(find.text('Увійти'));
+    await tester.pumpAndSettle();
+    expect(find.text('Створити акаунт'), findsNothing);
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Увійти'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Увійти'));
+    await tester.pumpAndSettle();
+    expect(find.text('Пристрої'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Профіль'));
+    await tester.pumpAndSettle();
+    expect(find.text('Особисті дані'), findsOneWidget);
+
+    // Вкладений маршрут /main/profile дає кнопку «назад» у AppBar.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Пристрої'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Профіль'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Вийти'), 200);
+    await tester.tap(find.text('Вийти'));
+    await tester.pumpAndSettle();
+    expect(find.text('Увійдіть, щоб керувати своїм домом'), findsOneWidget);
   });
 
-  testWidgets('counter reacts to user input', (tester) async {
-    await tester.pumpWidget(const MyApp());
-    final field = find.byKey(const Key('inputField'));
-    final button = find.byKey(const Key('submitButton'));
-    String counter() =>
-        tester.widget<Text>(find.byKey(const Key('counterValue'))).data!;
+  testWidgets('room filter shows only devices of selected room', (
+    tester,
+  ) async {
+    _setSize(tester, const Size(768, 1024));
+    await _pumpRoute(tester, AppRoutes.main);
+    expect(find.text('Нічник'), findsOneWidget);
 
-    expect(counter(), '0');
-
-    await tester.enterText(field, '10');
-    await tester.tap(button);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Кухня'));
     await tester.pump();
-    expect(counter(), '10');
-
-    await tester.enterText(field, '-3');
-    await tester.tap(button);
-    await tester.pump();
-    expect(counter(), '7');
-
-    await tester.enterText(field, 'hello');
-    await tester.tap(button);
-    await tester.pump();
-    expect(counter(), '7');
-    expect(find.byType(SnackBar), findsOneWidget);
-
-    await tester.enterText(field, 'Avada Kedavra');
-    await tester.tap(button);
-    await tester.pump();
-    expect(counter(), '0');
+    expect(find.text('Нічник'), findsNothing);
+    expect(find.text('Розумна розетка'), findsOneWidget);
   });
+
+  for (final size in _screenSizes) {
+    for (final route in AppRoutes.all) {
+      testWidgets('$route renders without overflow at $size', (tester) async {
+        _setSize(tester, size);
+        await _pumpRoute(tester, route);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 }
